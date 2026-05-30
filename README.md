@@ -20,9 +20,11 @@ luoke_app.py
 Three transport layers (auto-selected in order):
 | Layer | Latency | Cable needed | Phone daemon |
 |-------|---------|-------------|--------------|
-| **USB ACM** | ~0.1ms | ✅ USB data cable | hid_daemon.py |
+| **USB ACM** ⚠️ | ~0.1ms | ✅ USB data cable | hid_daemon.py |
 | **TCP/WiFi** | ~20ms | ❌ WiFi only | hid_daemon.py |
 | **SSH** | ~500ms | ❌ WiFi only | None (direct) |
+
+⚠️ USB ACM requires kernel `g.serial` support. If unavailable (e.g. OnePlus 9RT on stock kernel), falls back to TCP.
 
 ## Requirements
 
@@ -30,6 +32,7 @@ Three transport layers (auto-selected in order):
 - **Root access** (Magisk recommended)
 - **Termux** with Python 3
 - Kernel with **CONFIGFS** + **USB Gadget** support (most LineageOS / custom kernels)
+- `g.serial` kernel module (optional — TCP works without it)
 - USB cable for HID mode (`python3 phone_hid_dual.py` restores ADB/MTP on exit)
 
 ### PC
@@ -52,9 +55,9 @@ ssh -p 8022 root@phone "su -c 'python3 /data/data/com.termux/files/home/phone_hi
 
 This will:
 1. Stop ADB
-2. Create USB Gadget with HID keyboard + mouse + serial ACM
+2. Create USB Gadget with HID keyboard + mouse + serial ACM (optional)
 3. Start `hid_daemon.py` in background
-4. PC should detect HID Keyboard + Mouse + COM port
+4. PC should detect HID Keyboard + Mouse + COM port (if g.serial available)
 
 ### 2. PC: Use HIDInput
 
@@ -130,13 +133,25 @@ Common UDC names per SoC:
 - Exynos: `dwc3`
 - Kirin: `ff100000.dwc3`
 
+## Scripts
+
+| Script | Run on | Description |
+|--------|--------|-------------|
+| `丢球_HID.py` | PC | Clean HID throw loop, rate display, CapsLock pause, NumLock exit |
+| `丢球_手机版.py` | Phone | Direct hidg writes (no daemon), ~15% faster, Ctrl+C or bail file to stop |
+| `秒丢2.5球.py` | PC | Original throw script (legacy, kept for reference) |
+
+Set `LUOKE_TRANSPORT=tcp` before running PC scripts on kernels without `g.serial`.
+
 ## Project Structure
 
 ```
 luoke/
 ├── hid_device.py         PC端: 三层传输 + 键鼠接口
 ├── rock_hid.py           PC端: 洛克王国工具 (窗口检测 + 安全校验)
-├── 秒丢2.5球.py          PC端: 丢球脚本
+├── 丢球_HID.py           PC端: 丢球脚本 (HID, 速率显示)
+├── 丢球_手机版.py         手机: 丢球脚本 (直接写 hidg)
+├── 秒丢2.5球.py          PC端: 旧丢球脚本 (未改)
 ├── phone_hid_dual.py     手机: Gadget 配置 + 复原
 ├── phone/                 手机端脚本
 │   ├── hid_daemon.py     常驻 daemon (USB ACM/TCP)

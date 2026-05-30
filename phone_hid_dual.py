@@ -24,9 +24,11 @@ import os, time, sys, subprocess, json
 # ── 自动检测 ──────────────────────────────────
 
 def detect_udc():
-    for d in os.listdir("/sys/class/udc/"):
-        return d
-    return None
+    udcs = sorted(os.listdir("/sys/class/udc/"))
+    for d in udcs:
+        if "dummy" not in d:
+            return d
+    return udcs[0] if udcs else None
 
 def detect_configfs():
     for mount in ["/config", "/sys/kernel/config", "/sys/config"]:
@@ -231,11 +233,15 @@ def setup_hid(start_daemon=True):
     write_file(f"{mp}/report_desc", HID_MOUSE_DESC)
     os.symlink(mp, f"{b1}/hid.mouse"); log("linked")
 
-    # 7. ACM Serial (控制通道)
+    # 7. ACM Serial (控制通道, 可选)
     print("[7] g.serial (ACM)")
     sp = f"{G}/functions/g.serial"
-    os.makedirs(sp, exist_ok=True)
-    os.symlink(sp, f"{b1}/g.serial"); log("linked")
+    try:
+        os.makedirs(sp, exist_ok=True)
+        os.symlink(sp, f"{b1}/g.serial"); log("linked")
+    except Exception as e:
+        log(f"g.serial not supported: {e}")
+        log("(HID+TCP daemon will work without serial)")
 
     # 8. Bind UDC
     print(f"[8] Bind UDC ({UDC})")
@@ -265,9 +271,10 @@ def setup_hid(start_daemon=True):
         print("\n[10] Start daemon")
         daemon = find_daemon()
         if daemon:
+            my_python = sys.executable or "/data/data/com.termux/files/usr/bin/python3"
             log(f"starting {daemon} ...")
             subprocess.Popen(
-                ["python3", daemon],
+                [my_python, daemon],
                 stdout=open("/data/local/tmp/hid_daemon.log", "w"),
                 stderr=subprocess.STDOUT)
         else:

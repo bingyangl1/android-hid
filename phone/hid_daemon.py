@@ -219,18 +219,20 @@ def main():
         except OSError: continue
 
     # TCP
+    listener = None
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     try:
         host = os.environ.get("HID_TCP_HOST", "0.0.0.0")
         sock.bind((host, TCP_PORT)); sock.listen(5); sock.setblocking(False)
-        reads.append((sock.fileno(), f"tcp:{TCP_PORT}", sock))
+        listener = sock.fileno()
+        reads.append((listener, f"tcp:{TCP_PORT}", sock))
         print(f"  TCP:{host}:{TCP_PORT}: listening")
     except Exception as e: print(f"  TCP:{TCP_PORT}: {e}")
 
     # stdin (SSH pipe)
     reads.append((sys.stdin.fileno(), "stdin"))
-    print("Daemon ready. Commands: mclick|x1|x2 mpress mmove ktap kpress krelease throw bthrow ping quit")
+    print("Daemon ready.")
     try: os.unlink(BAIL_FILE)
     except: pass
 
@@ -248,9 +250,9 @@ def main():
                 if e[0] == fd: tag = e[1]; extra = e[2] if len(e) > 2 else None; break
             if not tag: continue
             try:
-                if extra is not None and fd == extra.fileno():
+                if fd == listener:
                     conn, addr = extra.accept(); conn.setblocking(False)
-                    reads.append((conn.fileno(), f"tcp({addr[0]})", conn))
+                    reads.append((conn.fileno(), f"tcp({addr[0]})"))
                     print(f"  TCP: {addr[0]} connected"); continue
                 data = os.read(fd, 4096)
                 if not data:

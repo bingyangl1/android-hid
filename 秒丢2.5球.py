@@ -351,8 +351,8 @@ def execute_diu_qiu_sequence_hid(hwnd, x, y):
     if not hwnd:
         return False
     dev.mouse.click("left", hold_ms=175)    # 左键按住150ms
-    time.sleep(random.randint(130, 132) / 1000)
-    dev.mouse.click("right", hold_ms=25)    # 右键按住65ms
+    time.sleep(random.randint(100, 100) / 1000)
+    dev.mouse.click("right", hold_ms=25)    # 右键按住25ms
     return True
 # ==================== 测试程序 ====================
 @Timer()
@@ -416,7 +416,7 @@ def main():
                     paused = False
 
             # 执行丢球序列
-            if execute_diu_qiu_sequence(hwnd, click_x, click_y):
+            if execute_diu_qiu_sequence_hid(hwnd, click_x, click_y):
                 # 可选：取消注释以每步都输出
                 count += 1
                 log(f"[{time.strftime('%H:%M:%S')}] 坐标: ({click_x}, {click_y}) 丢球完成, 已丢{count}球")

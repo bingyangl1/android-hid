@@ -75,8 +75,8 @@ def main():
                 continue
 
             dev.mouse.click("left", hold_ms=random.randint(165, 185))
-            time.sleep(random.uniform(0.09, 0.11))
-            dev.mouse.click("right", hold_ms=random.randint(15, 35))
+            time.sleep(random.uniform(0.10, 0.12))
+            dev.mouse.click("right", hold_ms=random.randint(25, 35))
 
             count += 1
             rate_count += 1

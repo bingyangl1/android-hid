@@ -7,6 +7,7 @@ import android.bluetooth.BluetoothHidDeviceAppQosSettings
 import android.bluetooth.BluetoothHidDeviceAppSdpSettings
 import android.bluetooth.BluetoothProfile
 import android.content.Context
+import android.content.Intent
 import com.luoke.hid.reports.DescriptorCollection
 import com.luoke.hid.reports.MouseReport
 import com.luoke.hid.reports.KeyboardReport
@@ -46,7 +47,11 @@ class BluetoothController(private val ctx: Context) {
                 { },
                 hidCallback
             )
-            adapter.setScanMode(BluetoothAdapter.SCAN_MODE_CONNECTABLE_DISCOVERABLE, 300000)
+            Intent(BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE).also {
+                it.putExtra(BluetoothAdapter.EXTRA_DISCOVERABLE_DURATION, 300)
+                it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                ctx.startActivity(it)
+            }
         }
 
         override fun onServiceDisconnected(profile: Int) {

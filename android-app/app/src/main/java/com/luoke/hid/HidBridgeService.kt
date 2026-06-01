@@ -21,7 +21,7 @@ class HidBridgeService : Service() {
         val ntf = Notification.Builder(this, CHANNEL_ID)
             .setContentTitle("LUOKE HID Bridge")
             .setContentText("Running")
-            .setSmallIcon(android.R.drawable.ic_menu_device)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
             .build()
         startForeground(1, ntf)
 
@@ -38,7 +38,7 @@ class HidBridgeService : Service() {
         val ntf = Notification.Builder(this, CHANNEL_ID)
             .setContentTitle("LUOKE HID Bridge")
             .setContentText(text)
-            .setSmallIcon(android.R.drawable.ic_menu_device)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setOngoing(true)
             .build()
         startForeground(1, ntf)

@@ -54,7 +54,6 @@ CFG = {
 }
 
 _EXEC = f"{CFG['home']}/exec.py"
-_REPEAT_THROW = f"{CFG['home']}/repeat_throw.py"
 _SSH_CTL = "/tmp/ssh-ctl-luoke"
 
 def _ssh_cmd(command):
@@ -175,12 +174,6 @@ class SSHTransport(Transport):
         r = subprocess.run(_ssh_cmd(f"{CFG['python']} {_EXEC} {enc}"),
                            capture_output=True, timeout=30, text=True)
         return "ok" if r.returncode == 0 else f"err:{r.stderr[:200]}"
-
-    def batch_throw(self, n=10, t1_ms=175, gap_ms=20, t2_ms=35, iv_ms=0):
-        r = subprocess.run(_ssh_cmd(
-            f"{CFG['python']} {_REPEAT_THROW} {n} {t1_ms} {gap_ms} {t2_ms} {iv_ms}"),
-            capture_output=True, timeout=300, text=True)
-        return r.returncode == 0
 
     def _compile(self, command):
         parts = command.strip().split(":")
@@ -347,10 +340,8 @@ class HIDInput:
         return self._t.cmd(command)
 
     def batch_throw(self, n=10, t1_ms=175, gap_ms=20, t2_ms=35, iv_ms=0):
-        if isinstance(self._t, SSHTransport):
-            return self._t.batch_throw(n, t1_ms, gap_ms, t2_ms, iv_ms)
-        self._t.cmd(f"bthrow:{n}:{t1_ms}:{gap_ms}:{t2_ms}:{iv_ms}")
-        return True
+        r = self._t.cmd(f"bthrow:{n}:{t1_ms}:{gap_ms}:{t2_ms}:{iv_ms}")
+        return r.startswith("ok")
 
     @property
     def transport_name(self): return self._t.name
@@ -361,12 +352,6 @@ def run_py(code):
     enc = base64.b64encode(code.encode()).decode()
     r = subprocess.run(_ssh_cmd(f"{CFG['python']} {_EXEC} {enc}"),
                        capture_output=True, timeout=15, text=True)
-    return r.returncode == 0
-
-def batch_throw(n=10, t1_ms=175, gap_ms=50, t2_ms=35, iv_ms=500):
-    r = subprocess.run(_ssh_cmd(
-        f"{CFG['python']} {_REPEAT_THROW} {n} {t1_ms} {gap_ms} {t2_ms} {iv_ms}"),
-        capture_output=True, timeout=300, text=True)
     return r.returncode == 0
 
 if __name__ == "__main__":

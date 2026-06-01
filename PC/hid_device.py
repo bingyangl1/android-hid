@@ -1,31 +1,35 @@
 #!/usr/bin/env python3
 """
-USB HID 三层传输 + 全面键鼠模拟
-          延迟   可靠性
- USB ACM   ~0.1ms ★★★★★ (数据线)
- TCP WiFi   ~20ms ★★★★
- SSH        ~500ms ★★★ (兜底)
+USB HID 四层传输 + 全面键鼠模拟
+             延迟     可靠性
+ USB RNDIS   ~1ms     ★★★★★ (USB 数据线, 首选)
+ TCP WiFi    ~20ms    ★★★★ (WiFi, 备选)
+ USB ACM     ~0.1ms   ★★★★★ (内核支持时可用)
+ SSH         ~500ms   ★★★ (兜底)
+
+自动降级: RNDIS → TCP → SSH
 
 用法:
-  dev = HIDInput()              → 自动选最快
-  dev = HIDInput("usb")         → 强制 USB COM
-  dev = HIDInput("tcp")         → 强制 TCP (WiFi)
-  dev = HIDInput("ssh")         → 强制 SSH
+  dev = HIDInput()                → 自动选最快 (RNDIS > TCP > SSH)
+  dev = HIDInput("rndis")         → 强制 USB RNDIS
+  dev = HIDInput("tcp")           → 强制 TCP (WiFi)
+  dev = HIDInput("ssh")           → 强制 SSH
 
   dev.mouse.click("left", 175)
   dev.mouse.click("x1", 40)
   dev.keyboard.tap("LSHIFT", 35)
   dev.keyboard.tap("F5")
-  dev.cmd("mclick:x1:175")      → 原始命令
+  dev.cmd("mclick:x1:175")        → 原始命令
 
 环境变量:
-  LUOKE_HOST      SSH IP     (默认 root@192.168.5.170)
-  LUOKE_SSHPORT   SSH 端口   (默认 8022)
-  LUOKE_TCPPORT   TCP 端口   (默认 8023)
-  LUOKE_TCPHOST   TCP 地址   (默认 192.168.5.170)
-  LUOKE_VID       COM 的 VID (默认 VID_22D9)
-  LUOKE_PYTHON    手机 Python 路径
-  LUOKE_HOME      手机 home 目录
+  LUOKE_HOST       SSH IP       (默认 root@192.168.5.170)
+  LUOKE_SSHPORT    SSH 端口     (默认 8022)
+  LUOKE_TCPPORT    TCP 端口     (默认 8023)
+  LUOKE_TCPHOST    TCP 地址     (默认 192.168.5.170)
+  LUOKE_RNDISHOST  RNDIS 地址   (默认 192.168.42.2)
+  LUOKE_VID        COM 的 VID   (默认 VID_22D9)
+  LUOKE_PYTHON     手机 Python 路径
+  LUOKE_HOME       手机 home 目录
 """
 import subprocess, time, base64, socket, os, sys
 
@@ -37,15 +41,16 @@ def env(k, default):
     return os.environ.get(f"LUOKE_{k}", default)
 
 CFG = {
-    "host":     env("HOST",     "root@192.168.5.170"),
-    "ssh_port": env("SSHPORT",  "8022"),
-    "tcp_host": env("TCPHOST",  "192.168.5.170"),
-    "tcp_port": int(env("TCPPORT", "8023")),
-    "com_vid":  env("VID",      "VID_22D9"),
-    "python":   env("PYTHON",   "/data/data/com.termux/files/usr/bin/python3"),
-    "home":     env("HOME",     "/data/data/com.termux/files/home"),
-    "mouse":    "/dev/hidg1",
-    "kbd":      "/dev/hidg0",
+    "host":      env("HOST",      "root@192.168.5.170"),
+    "ssh_port":  env("SSHPORT",   "8022"),
+    "tcp_host":  env("TCPHOST",   "192.168.5.170"),
+    "tcp_port":  int(env("TCPPORT", "8023")),
+    "rndis_host":env("RNDISHOST", "192.168.42.2"),
+    "com_vid":   env("VID",       "VID_22D9"),
+    "python":    env("PYTHON",    "/data/data/com.termux/files/usr/bin/python3"),
+    "home":      env("HOME",      "/data/data/com.termux/files/home"),
+    "mouse":     "/dev/hidg1",
+    "kbd":       "/dev/hidg0",
 }
 
 _EXEC = f"{CFG['home']}/exec.py"
@@ -138,6 +143,17 @@ class USBTransport(Transport):
     def cmd(self, command):
         self._ser.write((command + "\n").encode())
         return self._ser.readline().decode(errors="replace").strip()
+
+class RNDISTransport(Transport):
+    name = "rndis"
+    def __init__(self, phone_ip=None, port=None, timeout=5):
+        phone_ip = phone_ip or CFG["rndis_host"]; port = port or CFG["tcp_port"]
+        self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self._sock.settimeout(timeout); self._sock.connect((phone_ip, port))
+
+    def cmd(self, command):
+        self._sock.send((command + "\n").encode())
+        return self._sock.recv(4096).decode(errors="replace").strip()
 
 class TCPTransport(Transport):
     name = "tcp"
@@ -243,7 +259,7 @@ class SSHTransport(Transport):
 # ── 自动选择 ─────────────────────────────────
 
 def auto_transport():
-    for name, cls in [("usb", USBTransport), ("tcp", TCPTransport)]:
+    for name, cls in [("rndis", RNDISTransport), ("tcp", TCPTransport)]:
         try:
             t = cls()
             print(f"[HID] {name}: ok"); return t
@@ -297,7 +313,12 @@ class HIDInput:
             self._t = transport_spec
         elif isinstance(transport_spec, str):
             s = transport_spec.lower()
-            if s.startswith("usb"): self._t = USBTransport()
+            if s.startswith("rndis"):
+                p = s.split(":")
+                h = p[1] if len(p) > 1 else CFG["rndis_host"]
+                n = int(p[2]) if len(p) > 2 else CFG["tcp_port"]
+                self._t = RNDISTransport(h, n)
+            elif s.startswith("usb"): self._t = USBTransport()
             elif s.startswith("tcp"):
                 p = s.split(":")
                 h = p[1] if len(p) > 1 else CFG["tcp_host"]

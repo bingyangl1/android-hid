@@ -5,171 +5,147 @@
 ## Architecture
 
 ```
-PC                                          Phone (rooted Android)
-──                                          ────────────────────
-luoke_app.py
+PC                                        Phone (rooted Android)
+──                                        ────────────────────
+PC/hid_device.py (RNDISTransport)
   │
-  ▼ HIDInput()
-  ├─ USBTransport ── USB ACM (COM port) ──→ hid_daemon.py
-  │                                          ├─ /dev/hidg0 (keyboard)
-  ├─ TCPTransport ── WiFi TCP:8023 ────────→ ├─ /dev/hidg1 (mouse)
-  │                                          └─ select() loop
-  └─ SSHTransport ── SSH (fallback) ───────→ exec.py / repeat_throw.py
+  ├─ RNDISTransport ─── USB RNDIS ──────→ phone/hid_daemon.py (TCP:8023)
+  │   (USB虚拟网卡,有线)                    ├─ /dev/hidg0 (keyboard)
+  ├─ TCPTransport  ─── WiFi TCP:8023 ───→ ├─ /dev/hidg1 (mouse)
+  │   (无线,备选)                           └─ select() loop
+  └─ SSHTransport  ─── SSH (兜底) ───────→ phone/exec.py
 ```
 
-Three transport layers (auto-selected in order):
-| Layer | Latency | Cable needed | Phone daemon |
-|-------|---------|-------------|--------------|
-| **USB ACM** ⚠️ | ~0.1ms | ✅ USB data cable | hid_daemon.py |
-| **TCP/WiFi** | ~20ms | ❌ WiFi only | hid_daemon.py |
-| **SSH** | ~500ms | ❌ WiFi only | None (direct) |
+传输层自动降级（RNDIS → TCP → SSH）：
 
-⚠️ USB ACM requires kernel `g.serial` support. If unavailable (e.g. OnePlus 9RT on stock kernel), falls back to TCP.
+| 层 | 延迟 | 线缆 | 依赖 |
+|----|------|------|------|
+| **USB RNDIS** | ~0.5-2ms | ✅ USB 数据线 | 内核 `gsi.rndis` |
+| **TCP/WiFi** | ~20ms | ❌ WiFi | 同网段 |
+| **SSH** | ~500ms | ❌ WiFi | SSHD + Termux |
 
 ## Requirements
 
 ### Phone
-- **Root access** (Magisk recommended)
+- **Root access** (Magisk)
 - **Termux** with Python 3
-- Kernel with **CONFIGFS** + **USB Gadget** support (most LineageOS / custom kernels)
-- `g.serial` kernel module (optional — TCP works without it)
-- USB cable for HID mode (`python3 phone_hid_dual.py` restores ADB/MTP on exit)
+- Kernel with CONFIGFS + USB Gadget + `gsi.rndis` (高通 DWC3 平台内置)
+- USB data cable
 
 ### PC
 - Python 3.8+
-- `pyserial` (optional, only needed for USB ACM mode): `pip install pyserial`
-- SSH client (for fallback)
+- SSH client (for SSH fallback)
 
 ## Quick Start
 
-### 1. Phone: Configure HID + Start Daemon
+### 1. Phone: Configure HID + RNDIS
 
 ```bash
-# Push scripts to phone
-scp -P 8022 -r phone root@phone:/data/data/com.termux/files/home/
-scp -P 8022 phone_hid_dual.py root@phone:/data/data/com.termux/files/home/
+# 推送到手机
+scp -P 8022 phone_hid_dual.py phone/ root@192.168.5.170:~/ -r
 
-# SSH into phone and run
-ssh -p 8022 root@phone "su -c 'python3 /data/data/com.termux/files/home/phone_hid_dual.py'"
+# SSH 进手机执行
+ssh -p 8022 root@192.168.5.170 \
+  "su -c 'python3 /data/data/com.termux/files/home/phone_hid_dual.py'"
 ```
 
-This will:
-1. Stop ADB
-2. Create USB Gadget with HID keyboard + mouse + serial ACM (optional)
-3. Start `hid_daemon.py` in background
-4. PC should detect HID Keyboard + Mouse + COM port (if g.serial available)
+执行后：
+1. 手机 Gadget 配置 HID 键盘 + 鼠标 + RNDIS 虚拟网卡
+2. 手机 RNDIS IP: `192.168.42.2/24`
+3. daemon 监听 `0.0.0.0:8023`
+4. PC 端自动识别 RNDIS 虚拟网卡
 
-### 2. PC: Use HIDInput
+### 2. PC: 使用 HIDInput
 
 ```python
-from hid_device import HIDInput
+from PC.hid_device import HIDInput
 
-dev = HIDInput()                    # Auto: USB > TCP > SSH
-dev.mouse.click("left", 175)        # Left click, 175ms hold
-dev.mouse.click("x1", 40)           # X1 (back) button
-dev.mouse.move(100, -50)            # Relative move
-dev.keyboard.tap("LSHIFT", 35)      # Tap LShift
-dev.keyboard.tap("F5")              # Tap F5
-dev.keyboard.tap("CTRL", 0)         # Modifier as tap (0ms = press only)
-dev.keyboard.press("W")             # Hold W
-dev.mouse.release("left")           # Release specific mouse button
-dev.keyboard.release()              # Release all
+dev = HIDInput()                    # Auto: RNDIS > TCP > SSH
+dev.mouse.click("left", 175)        # 左键点击, 按住175ms
+dev.mouse.click("x1", 40)           # X1 (后退) 键
+dev.mouse.move(100, -50)            # 相对移动
+dev.keyboard.tap("LSHIFT", 35)      # 点按 Shift
+dev.keyboard.tap("F5")              # 点按 F5
+dev.keyboard.press("W")             # 按住 W
+dev.keyboard.release()              # 松键
 ```
 
-### 3. Restore Normal USB (Phone)
+### 3. 恢复 USB（手机端）
 
 ```bash
 python3 phone_hid_dual.py restore
-# Or emergency kill: echo quit > /data/local/tmp/hid_daemon.quit && python3 reset_usb.py
+# 或紧急恢复: python3 phone/reset_usb.py
 ```
-
-## Configuration
-
-Phone-side env vars:
-```
-HID_UDC              → UDC name (auto-detect)
-HID_CONFIGFS_PATH    → ConfigFS mount (default /config/usb_gadget)
-HID_TCP_PORT         → Daemon TCP port (default 8023)
-```
-
-PC-side env vars:
-```
-LUOKE_HOST     → SSH user@host (default root@192.168.5.170)
-LUOKE_SSHPORT  → SSH port (default 8022)
-LUOKE_TCPHOST  → TCP host for daemon (default 192.168.5.170)
-LUOKE_TCPPORT  → TCP port (default 8023)
-LUOKE_VID      → USB VID for COM detection (default VID_22D9)
-```
-
-## Supported Inputs
-
-### Mouse (5 buttons + wheel)
-- `left`, `right`, `middle`, `x1`, `x2` buttons
-- Relative X/Y movement (8-bit, -127 to +127)
-- Vertical wheel
-
-### Keyboard (all standard keys)
-- A-Z, 0-9
-- F1-F12
-- Modifiers: `LCTRL/RCTRL`, `LSHIFT/RSHIFT`, `LALT/RALT`, `LGUI/RGUI`
-- Navigation: `UP/DOWN/LEFT/RIGHT`, `HOME/END/PGUP/PGDN`
-- Editing: `INSERT/DELETE/BACKSPACE/TAB/ENTER/ESCAPE`
-- Numpad: `NUM0-NUM9`, `NUM_SLASH/NUM_ASTERISK/NUM_MINUS/NUM_PLUS/NUM_DOT/NUM_ENTER`
-- Lock keys: `CAPSLOCK/NUMLOCK/SCROLLLOCK`
-- Other: `PRINTSCREEN/PAUSE/MENU`
-- Aliases: `CTRL=LCTRL`, `SHIFT=LSHIFT`, `ALT=LALT`, `GUI=LGUI`, `ESC=ESCAPE`, `DEL=DELETE`, `INS=INSERT`, etc.
-
-## Adapting to Other Phones
-
-1. **Find UDC**: `ls /sys/class/udc/` — use the only entry (auto-detected)
-2. **Verify ConfigFS**: `ls /config/usb_gadget/` should exist
-3. **If not**, try: `mount -t configfs none /config` (or find existing mount via `mount | grep configfs`)
-4. **Set env vars** if auto-detect fails
-
-Common UDC names per SoC:
-- Snapdragon (888/8Gen1/8Gen2): `a600000.dwc3`
-- Snapdragon (865/870): `a600000.dwc3`
-- MediaTek Dimensity: `musb-hdrc` or `11200000.usb`
-- Exynos: `dwc3`
-- Kirin: `ff100000.dwc3`
-
-## Scripts
-
-| Script | Run on | Description |
-|--------|--------|-------------|
-| `丢球_HID.py` | PC | Clean HID throw loop, rate display, CapsLock pause, NumLock exit |
-| `丢球_手机版.py` | Phone | Direct hidg writes (no daemon), ~15% faster, Ctrl+C or bail file to stop |
-| `秒丢2.5球.py` | PC | Original throw script (legacy, kept for reference) |
-
-Set `LUOKE_TRANSPORT=tcp` before running PC scripts on kernels without `g.serial`.
 
 ## Project Structure
 
 ```
-luoke/
-├── hid_device.py         PC端: 三层传输 + 键鼠接口
-├── rock_hid.py           PC端: 洛克王国工具 (窗口检测 + 安全校验)
-├── 丢球_HID.py           PC端: 丢球脚本 (HID, 速率显示)
-├── 丢球_手机版.py         手机: 丢球脚本 (直接写 hidg)
-├── 秒丢2.5球.py          PC端: 旧丢球脚本 (未改)
-├── phone_hid_dual.py     手机: Gadget 配置 + 复原
-├── phone/                 手机端脚本
-│   ├── hid_daemon.py     常驻 daemon (USB ACM/TCP)
-│   ├── reset_usb.py      紧急 USB 恢复
-│   ├── exec.py           SSH 代码执行器 (遗留)
-│   └── repeat_throw.py   SSH 批量丢球 (遗留)
-├── _archive/              旧版本归档
-└── 使用说明.md            中文详细文档
+F:\luoke/
+├── phone_hid_dual.py       手机: Gadget 配置 (RNDIS + HID)
+├── PC/
+│   ├── hid_device.py        PC: 四层传输 + 键鼠接口
+│   └── __init__.py
+├── phone/
+│   ├── hid_daemon.py       手机: 常驻 daemon (TCP:8023)
+│   ├── exec.py              SSH 单次代码执行器
+│   ├── repeat_throw.py      SSH 批量丢球
+│   └── reset_usb.py         USB 紧急恢复
+├── example/
+│   ├── rock_hid.py          洛克王国游戏集成
+│   ├── rock_hid_clicker.py  CLI 丢球器
+│   ├── 丢球_HID.py          丢球脚本（PC 端）
+│   └── 丢球_手机版.py        丢球脚本（手机端直写 hidg）
+├── docs/
+│   ├── RNDIS_MODE.md        USB 有线控制通道指南
+│   ├── ADB_MODE.md          ADB 触发模式指南
+│   └── DUCKSCRIPT.md        DuckyScript 语法参考
+├── archive/                  旧版本归档
+├── Android-HID 项目改造任务书.md
+└── README.md
 ```
+
+## Configuration
+
+Phone env vars:
+```
+HID_UDC              → UDC 名称 (自动检测)
+HID_CONFIGFS_PATH    → ConfigFS 挂载路径 (默认 /config/usb_gadget)
+HID_TCP_PORT         → Daemon TCP 端口 (默认 8023)
+```
+
+PC env vars:
+```
+LUOKE_HOST       → SSH user@host     (默认 root@192.168.5.170)
+LUOKE_SSHPORT    → SSH 端口          (默认 8022)
+LUOKE_TCPHOST    → TCP 主机地址      (默认 192.168.5.170)
+LUOKE_TCPPORT    → TCP 端口          (默认 8023)
+LUOKE_RNDISHOST  → RNDIS 手机 IP     (默认 192.168.42.2)
+```
+
+## Supported Inputs
+
+### Mouse (5 键 + 滚轮)
+- `left`, `right`, `middle`, `x1`, `x2`
+- 相对移动 (−127 to +127)
+- 垂直滚轮
+
+### Keyboard (全 104 键 + 修饰键)
+- A-Z, 0-9, F1-F12
+- 修饰键: `LCTRL/RCTRL`, `LSHIFT/RSHIFT`, `LALT/RALT`, `LGUI/RGUI`
+- 别名: `CTRL=LCTRL`, `SHIFT=LSHIFT`, `ALT=LALT`, `GUI=LGUI`
+
+## Adapting to Other Phones
+
+1. **UDC**: `ls /sys/class/udc/` — 用第一个非 dummy 的名称
+2. **ConfigFS**: `ls /config/usb_gadget/` 应存在；否则 `mount -t configfs none /config`
+3. **RNDIS**: 检查 `ls /config/usb_gadget/g1/functions/gsi.rndis` — 若无则自动降级 TCP
 
 ## Troubleshooting
 
-**USB not detected on PC**: Unplug/replug cable, run setup again.
+**HID 不工作**: `cat /sys/class/udc/<UDC>/state` 应显示 `configured`
 
-**No COM port appears**: Missing `g.serial` in gadget config. Verify `/dev/ttyGS0` on phone.
+**RNDIS 无网络接口**: 内核无 `gsi.rndis`，自动降级 TCP (WiFi)
 
-**HID device not showing**: Check UDC binding — `cat /sys/class/udc/<UDC>/state` should say `configured`.
+**Daemon 无法启动**: 检查日志 `/data/local/tmp/hid_daemon.log`
 
-**Daemon won't start**: Check logs at `/data/local/tmp/hid_daemon.log`
-
-**Restore ADB**: `python3 phone_hid_dual.py restore` or emergency: `python3 phone/reset_usb.py`
+**恢复 ADB**: `python3 phone_hid_dual.py restore` 或 `python3 phone/reset_usb.py`

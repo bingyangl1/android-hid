@@ -1,8 +1,10 @@
 import time
 import random
 import ctypes
+import sys, os
 from typing import Optional
-from hid_device import HIDInput
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+from PC.hid_device import HIDInput
 
 user32 = ctypes.WinDLL("user32", use_last_error=True)
 

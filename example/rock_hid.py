@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """
 洛克王国世界 - USB HID 工具类
-封装窗口检测 + 安全校验 + 自动选最快传输层 (USB/TCP/SSH)
+封装窗口检测 + 安全校验 + 自动选最快传输层 (RNDIS/TCP/SSH)
 """
-import time, ctypes
+import time, ctypes, sys, os
 from ctypes import wintypes
-from hid_device import HIDInput
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+from PC.hid_device import HIDInput
 
 USER32 = ctypes.windll.user32
 

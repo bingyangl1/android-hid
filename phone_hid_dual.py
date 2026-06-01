@@ -62,7 +62,7 @@ CONFIG = {
     "manufacturer":  os.environ.get("HID_MANUFACTURER", "Generic"),
     "product":       os.environ.get("HID_PRODUCT", "USB HID Bridge"),
     "MaxPower":      os.environ.get("HID_MAX_POWER", "500"),
-    "config_label":  "HID+Serial",
+    "config_label":  "HID+RNDIS",
 }
 
 def log(s): print(f"  {s}")
@@ -233,15 +233,18 @@ def setup_hid(start_daemon=True):
     write_file(f"{mp}/report_desc", HID_MOUSE_DESC)
     os.symlink(mp, f"{b1}/hid.mouse"); log("linked")
 
-    # 7. ACM Serial (控制通道, 可选)
-    print("[7] g.serial (ACM)")
-    sp = f"{G}/functions/g.serial"
-    try:
-        os.makedirs(sp, exist_ok=True)
-        os.symlink(sp, f"{b1}/g.serial"); log("linked")
-    except Exception as e:
-        log(f"g.serial not supported: {e}")
-        log("(HID+TCP daemon will work without serial)")
+    # 7. RNDIS (USB 虚拟网卡, 有线控制通道, 代替 ACM 串口)
+    print("[7] gsi.rndis (USB Ethernet)")
+    rp = f"{G}/functions/gsi.rndis"
+    if not os.path.isdir(rp):
+        log("gsi.rndis not in kernel, fallback to TCP/SSH")
+    else:
+        try:
+            write_file(f"{rp}/dev_addr", "42:69:69:00:00:02")
+            write_file(f"{rp}/host_addr", "42:69:69:00:00:01")
+            os.symlink(rp, f"{b1}/gsi.rndis"); log("linked")
+        except Exception as e:
+            log(f"gsi.rndis symlink failed: {e}")
 
     # 8. Bind UDC
     print(f"[8] Bind UDC ({UDC})")
@@ -250,13 +253,30 @@ def setup_hid(start_daemon=True):
     except Exception as e: log(f"error: {e}")
     time.sleep(3)
 
-    # 9. Verify
-    print("[9] Verify")
+    # 9. RNDIS IP 配置
+    print("[9] RNDIS network")
+    rndis_iface = None
+    for name in ["usb0", "rndis0", "eth0"]:
+        if os.path.isdir(f"/sys/class/net/{name}"):
+            rndis_iface = name; break
+    if rndis_iface:
+        subprocess.run(["ip", "addr", "add", "192.168.42.2/24", "dev", rndis_iface],
+                       capture_output=True)
+        subprocess.run(["ip", "link", "set", rndis_iface, "up"],
+                       capture_output=True)
+        log(f"{rndis_iface}: 192.168.42.2/24")
+    else:
+        log("no RNDIS interface (TCP/SSH only)")
+
+    # 10. Verify
+    print("[10] Verify")
     print(f"  UDC = '{read_file(f'{G}/UDC')}'")
     state = read_file(f'/sys/class/udc/{UDC}/state') if UDC else "?"
     print(f"  state = '{state}'")
-    for d in ["/dev/hidg0", "/dev/hidg1", "/dev/ttyGS0"]:
+    for d in ["/dev/hidg0", "/dev/hidg1"]:
         print(f"  {d}: {'present' if os.path.exists(d) else 'MISSING!'}")
+    if rndis_iface:
+        print(f"  {rndis_iface}: IP configured")
 
     # Trigger driver load
     for dev in ["/dev/hidg1", "/dev/hidg0"]:
@@ -266,7 +286,7 @@ def setup_hid(start_daemon=True):
             os.close(fd)
         except: pass
 
-    # 10. Daemon
+    # 11. Daemon
     if start_daemon:
         print("\n[10] Start daemon")
         daemon = find_daemon()
@@ -280,7 +300,8 @@ def setup_hid(start_daemon=True):
         else:
             log("hid_daemon.py not found")
 
-    print(f"\n=== HID ready: /dev/hidg0(kbd) /dev/hidg1(mouse) /dev/ttyGS0(serial) ===")
+    iface_info = f" / {rndis_iface}(RNDIS)" if rndis_iface else ""
+    print(f"\n=== HID ready: /dev/hidg0(kbd) /dev/hidg1(mouse){iface_info} ===")
     print(f"Restore: python3 {sys.argv[0]} restore")
 
 def find_daemon():

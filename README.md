@@ -65,6 +65,9 @@ ssh -p <ssh端口> <用户>@<手机IP> \
   "su -c 'python3 ~/phone_hid_dual.py'"
 ```
 
+**手机端必需文件**：`phone_hid_dual.py` + `phone/hid_daemon.py`（由入口脚本自动调用）。
+`phone/reset_usb.py`（紧急恢复 USB）和 `phone/exec.py`（SSH 兜底模式）按需推送，非必需。
+
 脚本自动完成：
 1. 停止 ADB，释放 USB
 2. 创建 USB Gadget（HID 键盘 + 鼠标 + RNDIS）

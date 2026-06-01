@@ -6,6 +6,7 @@ import kotlinx.coroutines.launch
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.io.OutputStreamWriter
+import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
 
@@ -22,7 +23,7 @@ class TcpServer(
         running = true
         scope.launch {
             try {
-                val ss = ServerSocket(port)
+                    val ss = ServerSocket(port, 50, InetAddress.getByName("0.0.0.0"))
                 serverSocket = ss
                 while (running) {
                     try {

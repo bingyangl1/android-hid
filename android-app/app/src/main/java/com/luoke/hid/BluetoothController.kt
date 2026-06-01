@@ -37,19 +37,23 @@ class BluetoothController(private val ctx: Context) {
             val hid = proxy as? BluetoothHidDevice ?: return
             hidDevice = hid
 
-            val sdp = BluetoothHidDeviceAppSdpSettings(
-                "LUOKE HID",
-                "蓝牙 HID 键盘鼠标",
-                "luoke-hid-bt",
-                BluetoothHidDevice.SUBCLASS1_COMBO,
-                DescriptorCollection.MOUSE_KEYBOARD_COMBO
+            val ok = hid.registerApp(
+                BluetoothHidDeviceAppSdpSettings(
+                    "LUOKE HID",
+                    "蓝牙 HID 键盘鼠标",
+                    "luoke-hid-bt",
+                    BluetoothHidDevice.SUBCLASS1_COMBO,
+                    DescriptorCollection.MOUSE_KEYBOARD_COMBO
+                ),
+                null,
+                BluetoothHidDeviceAppQosSettings(
+                    BluetoothHidDeviceAppQosSettings.SERVICE_BEST_EFFORT,
+                    800, 9, 0, 11250,
+                    BluetoothHidDeviceAppQosSettings.MAX
+                ),
+                java.util.concurrent.Executors.newSingleThreadExecutor(),
+                hidCallback
             )
-            val qos = BluetoothHidDeviceAppQosSettings(
-                BluetoothHidDeviceAppQosSettings.SERVICE_BEST_EFFORT,
-                800, 9, 0, 11250,
-                BluetoothHidDeviceAppQosSettings.MAX
-            )
-            val ok = hid.registerApp(sdp, qos, ctx.mainExecutor, hidCallback)
 
             if (ok) {
                 onStatus?.invoke("HID 已注册，正在开启可被发现...")

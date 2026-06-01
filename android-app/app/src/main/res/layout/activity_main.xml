@@ -9,7 +9,7 @@
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="LUOKE HID Bridge"
+        android:text="洛克 HID 桥"
         android:textSize="24sp"
         android:textStyle="bold" />
 
@@ -29,7 +29,7 @@
                 android:id="@+id/tvBluetooth"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Bluetooth: initializing..."
+                android:text="蓝牙: 初始化中..."
                 android:textSize="14sp" />
 
             <TextView
@@ -37,15 +37,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="TCP: initializing..."
-                android:textSize="14sp" />
-
-            <TextView
-                android:id="@+id/tvDevice"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="Device: none"
+                android:text="TCP: 初始化中..."
                 android:textSize="14sp" />
 
             <TextView
@@ -53,7 +45,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="Commands: 0"
+                android:text="命令数: 0"
                 android:textSize="14sp" />
 
         </LinearLayout>
@@ -64,7 +56,16 @@
         android:layout_width="match_parent"
         android:layout_height="56dp"
         android:layout_marginTop="24dp"
-        android:text="START"
+        android:text="启动"
         android:textSize="16sp" />
+
+    <TextView
+        android:id="@+id/tvHelp"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="? 如何配对"
+        android:textColor="?android:attr/colorAccent"
+        android:textSize="14sp" />
 
 </LinearLayout>

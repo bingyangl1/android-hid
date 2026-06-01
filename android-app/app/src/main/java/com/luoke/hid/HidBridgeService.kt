@@ -16,27 +16,35 @@ class HidBridgeService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        val chan = NotificationChannel(CHANNEL_ID, "HID Bridge", NotificationManager.IMPORTANCE_LOW)
+        val chan = NotificationChannel(CHANNEL_ID, "HID 桥接", NotificationManager.IMPORTANCE_LOW)
         getSystemService(NotificationManager::class.java).createNotificationChannel(chan)
         val ntf = Notification.Builder(this, CHANNEL_ID)
-            .setContentTitle("LUOKE HID Bridge")
-            .setContentText("Running")
+            .setContentTitle("洛克 HID 桥")
+            .setContentText("运行中")
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .build()
         startForeground(1, ntf)
 
+        bt.onStatus = { s -> sendBroadcast(Intent(STATUS_UPDATE).putExtra("text", s)) }
+        bt.onConnected = { _, d ->
+            updateNtf("已连接: ${d.name ?: d.address}")
+            sendBroadcast(Intent(STATUS_UPDATE).putExtra("text", "已连接: ${d.name ?: d.address}"))
+        }
+        bt.onDisconnected = {
+            updateNtf("已断开")
+            sendBroadcast(Intent(STATUS_UPDATE).putExtra("text", "已断开"))
+        }
         bt.init()
-        bt.onConnected = { _, _ -> updateNtf("Bluetooth connected") }
-        bt.onDisconnected = { updateNtf("Bluetooth disconnected") }
 
         tcp = TcpServer(8023, executor) { cmdCount++; sendBroadcast(Intent(CMD_UPDATE).apply { putExtra("count", cmdCount) }) }
         tcp?.start()
-        updateNtf("Listening TCP:8023")
+        updateNtf("TCP:8023 监听中")
+        sendBroadcast(Intent(STATUS_UPDATE).putExtra("text", "TCP:8023 监听中"))
     }
 
     private fun updateNtf(text: String) {
         val ntf = Notification.Builder(this, CHANNEL_ID)
-            .setContentTitle("LUOKE HID Bridge")
+            .setContentTitle("洛克 HID 桥")
             .setContentText(text)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setOngoing(true)
@@ -55,5 +63,6 @@ class HidBridgeService : Service() {
     companion object {
         const val CHANNEL_ID = "hid_bridge"
         const val CMD_UPDATE = "com.luoke.hid.CMD_UPDATE"
+        const val STATUS_UPDATE = "com.luoke.hid.STATUS_UPDATE"
     }
 }

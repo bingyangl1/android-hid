@@ -11,6 +11,7 @@ import android.content.Intent
 import com.luoke.hid.reports.DescriptorCollection
 import com.luoke.hid.reports.MouseReport
 import com.luoke.hid.reports.KeyboardReport
+import java.util.concurrent.Executors
 
 class BluetoothController(private val ctx: Context) {
 
@@ -19,9 +20,15 @@ class BluetoothController(private val ctx: Context) {
     var hostDevice: BluetoothDevice? = null
     var onConnected: ((BluetoothHidDevice, BluetoothDevice) -> Unit)? = null
     var onDisconnected: (() -> Unit)? = null
+    var onStatus: ((String) -> Unit)? = null
 
     fun init() {
         if (hidDevice != null) return
+        if (!adapter.isEnabled) {
+            onStatus?.invoke("蓝牙未开启")
+            return
+        }
+        onStatus?.invoke("正在请求 HID 代理...")
         adapter.getProfileProxy(ctx, serviceListener, BluetoothProfile.HID_DEVICE)
     }
 
@@ -30,32 +37,43 @@ class BluetoothController(private val ctx: Context) {
             if (profile != BluetoothProfile.HID_DEVICE) return
             val hid = proxy as? BluetoothHidDevice ?: return
             hidDevice = hid
-            hid.registerApp(
+            val ok = hid.registerApp(
                 BluetoothHidDeviceAppSdpSettings(
                     "LUOKE HID",
-                    "LUOKE Bluetooth HID Bridge",
+                    "蓝牙 HID 键盘鼠标",
                     "luoke-hid-bt",
                     BluetoothHidDevice.SUBCLASS1_COMBO,
                     DescriptorCollection.MOUSE_KEYBOARD_COMBO
                 ),
-                null,
                 BluetoothHidDeviceAppQosSettings(
                     BluetoothHidDeviceAppQosSettings.SERVICE_BEST_EFFORT,
                     800, 9, 0, 11250,
                     BluetoothHidDeviceAppQosSettings.MAX
                 ),
-                { },
+                Executors.newSingleThreadExecutor(),
                 hidCallback
             )
-            Intent(BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE).also {
-                it.putExtra(BluetoothAdapter.EXTRA_DISCOVERABLE_DURATION, 300)
-                it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                ctx.startActivity(it)
+            if (ok) {
+                onStatus?.invoke("HID 已注册，正在开启可被发现...")
+                try {
+                    Intent(BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE).also {
+                        it.putExtra(BluetoothAdapter.EXTRA_DISCOVERABLE_DURATION, 300)
+                        it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        ctx.startActivity(it)
+                    }
+                } catch (_: Exception) {
+                    onStatus?.invoke("HID 已注册（请手动开启蓝牙可被发现）")
+                }
+            } else {
+                onStatus?.invoke("HID 注册失败")
             }
         }
 
         override fun onServiceDisconnected(profile: Int) {
-            if (profile == BluetoothProfile.HID_DEVICE) hidDevice = null
+            if (profile == BluetoothProfile.HID_DEVICE) {
+                hidDevice = null
+                onStatus?.invoke("HID 代理已断开")
+            }
         }
     }
 
@@ -65,11 +83,13 @@ class BluetoothController(private val ctx: Context) {
                 BluetoothProfile.STATE_CONNECTED -> {
                     if (device != null) {
                         hostDevice = device
+                        onStatus?.invoke("已连接: ${device.name ?: device.address}")
                         hidDevice?.let { onConnected?.invoke(it, device) }
                     }
                 }
                 BluetoothProfile.STATE_DISCONNECTED -> {
                     hostDevice = null
+                    onStatus?.invoke("已断开")
                     onDisconnected?.invoke()
                 }
             }

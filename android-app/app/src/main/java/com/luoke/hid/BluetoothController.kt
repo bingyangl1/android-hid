@@ -11,7 +11,6 @@ import android.content.Intent
 import com.luoke.hid.reports.DescriptorCollection
 import com.luoke.hid.reports.MouseReport
 import com.luoke.hid.reports.KeyboardReport
-import java.util.concurrent.Executors
 
 class BluetoothController(private val ctx: Context) {
 
@@ -50,7 +49,6 @@ class BluetoothController(private val ctx: Context) {
                     800, 9, 0, 11250,
                     BluetoothHidDeviceAppQosSettings.MAX
                 ),
-                Executors.newSingleThreadExecutor(),
                 hidCallback
             )
             if (ok) {

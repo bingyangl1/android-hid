@@ -6,7 +6,7 @@ USB HID Daemon (通用版)
 
 所有鼠标按键 + 完整键盘映射
 """
-import os, time, select, socket, sys, signal
+import os, time, selectors, socket, sys, signal
 
 HID_MOUSE = os.environ.get("HID_MOUSE", "/dev/hidg1")
 HID_KBD   = os.environ.get("HID_KBD",   "/dev/hidg0")
@@ -209,29 +209,32 @@ def main():
     if fm is None or fk is None:
         print("HID devices unavailable, exiting"); sys.exit(1)
 
-    reads = []
+    sel = selectors.DefaultSelector()
+
     # Serial (USB ACM)
     for dev in os.environ.get("HID_SERIAL_DEVS", "/dev/ttyGS0,/dev/ttyGS1,/dev/ttyACM0").split(","):
         try:
             fd = os.open(dev.strip(), os.O_RDWR | os.O_NONBLOCK)
-            reads.append((fd, f"serial({dev.strip()})")); print(f"  {dev.strip()}: opened")
-            break
+            sel.register(fd, selectors.EVENT_READ, data=("serial", fd, os.read, fd))
+            print(f"  {dev.strip()}: opened"); break
         except OSError: continue
 
-    # TCP
-    listener = None
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    # TCP listener
+    tcp_sock = None
     try:
+        tcp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        tcp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         host = os.environ.get("HID_TCP_HOST", "0.0.0.0")
-        sock.bind((host, TCP_PORT)); sock.listen(5); sock.setblocking(False)
-        listener = sock.fileno()
-        reads.append((listener, f"tcp:{TCP_PORT}", sock))
+        tcp_sock.bind((host, TCP_PORT)); tcp_sock.listen(5); tcp_sock.setblocking(False)
+        sel.register(tcp_sock, selectors.EVENT_READ, data=("listener", tcp_sock, None))
         print(f"  TCP:{host}:{TCP_PORT}: listening")
-    except Exception as e: print(f"  TCP:{TCP_PORT}: {e}")
+    except Exception as e:
+        print(f"  TCP:{TCP_PORT}: {e}")
+        if tcp_sock: tcp_sock.close()
 
     # stdin (SSH pipe)
-    reads.append((sys.stdin.fileno(), "stdin"))
+    sel.register(sys.stdin, selectors.EVENT_READ, data=("stdin", sys.stdin.fileno(), os.read, sys.stdin))
+
     print("Daemon ready.")
     try: os.unlink(BAIL_FILE)
     except: pass
@@ -241,43 +244,40 @@ def main():
             if os.path.exists(BAIL_FILE): print("Quit file detected"); break
         except: pass
         try:
-            r, _, _ = select.select([e[0] for e in reads], [], [], 1.0)
-        except (select.error, OSError):
+            events = sel.select(timeout=1.0)
+        except OSError:
             time.sleep(0.1); continue
-        for fd in r:
-            tag = None; extra = None
-            for e in reads:
-                if e[0] == fd: tag = e[1]; extra = e[2] if len(e) > 2 else None; break
-            if not tag: continue
+        for key, _ in events:
+            kind, obj, reader, *extra = key.data
+            fileobj = extra[0] if extra else obj
             try:
-                if fd == listener:
-                    conn, addr = extra.accept(); conn.setblocking(False)
-                    reads.append((conn.fileno(), f"tcp({addr[0]})"))
-                    print(f"  TCP: {addr[0]} connected"); continue
-                data = os.read(fd, 4096)
+                if kind == "listener":
+                    conn, addr = obj.accept()
+                    conn.setblocking(False)
+                    sel.register(conn, selectors.EVENT_READ,
+                                 data=("tcp", conn, lambda o, n: o.recv(n)))
+                    print(f"  TCP: {addr[0]} connected")
+                    continue
+                data = reader(obj, 4096)
                 if not data:
-                    print(f"  {tag}: closed")
-                    reads = [e for e in reads if e[0] != fd]
-                    try:
-                        if extra: extra.close()
-                    except: pass
+                    print(f"  {kind}: closed")
+                    sel.unregister(fileobj)
+                    if hasattr(fileobj, "close"): fileobj.close()
                     continue
                 for line in data.decode(errors="replace").split("\n"):
                     line = line.strip()
                     if not line: continue
                     resp = exec_cmd(line) + "\n"
-                    try: os.write(fd, resp.encode())
-                    except OSError:
-                        try:
-                            if extra: extra.send(resp.encode())
-                        except: pass
+                    if kind == "tcp":
+                        obj.sendall(resp.encode())
+                    else:
+                        try: os.write(obj if isinstance(obj, int) else obj.fileno(), resp.encode())
+                        except OSError: pass
             except (OSError, BlockingIOError): continue
 
     if fm: os.close(fm)
     if fk: os.close(fk)
-    for fd, *_ in reads:
-        try: os.close(fd)
-        except: pass
+    sel.close()
     print("Daemon stopped")
 
 if __name__ == "__main__":

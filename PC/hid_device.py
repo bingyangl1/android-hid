@@ -147,8 +147,32 @@ class RNDISTransport(Transport):
     name = "rndis"
     def __init__(self, phone_ip=None, port=None, timeout=5):
         phone_ip = phone_ip or CFG["rndis_host"]; port = port or CFG["tcp_port"]
+        self._net_iface = None; self._restore_dhcp = False
+        self._setup_net(phone_ip)
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._sock.settimeout(timeout); self._sock.connect((phone_ip, port))
+
+    def _setup_net(self, phone_ip):
+        r = subprocess.run(["powershell", "-Command",
+            "Get-NetAdapter -InterfaceDescription '*Remote NDIS*' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name"],
+            capture_output=True, text=True)
+        iface = r.stdout.strip()
+        if not iface: return
+        gateway = ".".join(phone_ip.split(".")[:3]) + ".1"
+        subprocess.run(["netsh", "interface", "ip", "set", "address", iface, "static", gateway, "255.255.255.0"],
+                       capture_output=True)
+        self._net_iface = iface; self._restore_dhcp = True
+
+    def close(self):
+        if self._restore_dhcp and self._net_iface:
+            subprocess.run(["netsh", "interface", "ip", "set", "address", self._net_iface, "dhcp"],
+                           capture_output=True)
+            self._restore_dhcp = False
+        if hasattr(self, '_sock'): self._sock.close()
+
+    def __del__(self):
+        try: self.close()
+        except: pass
 
     def cmd(self, command):
         self._sock.send((command + "\n").encode())

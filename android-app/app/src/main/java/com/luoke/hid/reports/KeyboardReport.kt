@@ -3,7 +3,7 @@ package com.luoke.hid.reports
 import kotlin.experimental.and
 import kotlin.experimental.or
 
-inline class KeyboardReport(val bytes: ByteArray = ByteArray(3) { 0 }) {
+class KeyboardReport(val bytes: ByteArray = ByteArray(3) { 0 }) {
 
     var leftControl: Boolean
         get() = bytes[0] and 0b1 != 0.toByte()

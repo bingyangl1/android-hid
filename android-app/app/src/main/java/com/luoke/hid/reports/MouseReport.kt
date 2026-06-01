@@ -3,7 +3,7 @@ package com.luoke.hid.reports
 import kotlin.experimental.and
 import kotlin.experimental.or
 
-inline class MouseReport(val bytes: ByteArray = ByteArray(7) { 0 }) {
+class MouseReport(val bytes: ByteArray = ByteArray(7) { 0 }) {
 
     var leftButton: Boolean
         get() = bytes[0] and 0b1 != 0.toByte()

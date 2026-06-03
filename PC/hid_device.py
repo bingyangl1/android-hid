@@ -234,7 +234,8 @@ class HIDKeyboard:
         return self
 
 class HIDInput:
-    def __init__(self, transport_spec=None):
+    def __init__(self, transport_spec=None, show_latency=False):
+        self._show_latency = show_latency
         if transport_spec is None:
             self._t = auto_transport()
         elif isinstance(transport_spec, Transport):
@@ -256,6 +257,7 @@ class HIDInput:
             raise TypeError(f"expected str/Transport, got {type(transport_spec)}")
         self.mouse = HIDMouse(self._t)
         self.keyboard = HIDKeyboard(self._t)
+        self._latency_buf = []
 
     def click(self, button="left", hold_ms=40):
         self.mouse.click(button, hold_ms)
@@ -270,17 +272,49 @@ class HIDInput:
         self.keyboard.release()
 
     def cmd(self, command):
-        return self._t.cmd(command)
+        t0 = time.perf_counter()
+        result = self._t.cmd(command)
+        elapsed = (time.perf_counter() - t0) * 1000
+        if self._show_latency:
+            print(f"[{elapsed:.1f}ms] {command} → {result}")
+        self._latency_buf.append(elapsed)
+        return result
 
     def batch_throw(self, n=10, t1_ms=175, gap_ms=20, t2_ms=35, iv_ms=0):
         r = self._t.cmd(f"bthrow:{n}:{t1_ms}:{gap_ms}:{t2_ms}:{iv_ms}")
         return r.startswith("ok")
 
+    def latency_stats(self):
+        """返回延迟统计 {avg, min, max, p50, p99, count}"""
+        buf = self._latency_buf
+        if not buf:
+            return None
+        s = sorted(buf)
+        n = len(s)
+        return {
+            "avg":  sum(s) / n,
+            "min":  s[0],
+            "max":  s[-1],
+            "p50":  s[n // 2],
+            "p99":  s[int(n * 0.99)] if n >= 100 else s[-1],
+            "count": n,
+        }
+
+    def latency_str(self):
+        """格式化延迟统计"""
+        st = self.latency_stats()
+        if not st:
+            return "no data"
+        return (f"avg={st['avg']:.1f}ms min={st['min']:.1f}ms "
+                f"max={st['max']:.1f}ms p50={st['p50']:.1f}ms "
+                f"p99={st['p99']:.1f}ms n={st['count']}")
+
     @property
     def transport_name(self): return self._t.name
 
 if __name__ == "__main__":
-    d = HIDInput()
+    d = HIDInput(show_latency=True)
     print(f"Transport: {d.transport_name}")
     r = d.cmd("ping")
     print(f"Ping: {r}")
+    print(d.latency_str())

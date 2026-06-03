@@ -3,7 +3,10 @@ package com.hid.btbridge.reports
 import kotlin.experimental.and
 import kotlin.experimental.or
 
-class KeyboardReport(val bytes: ByteArray = ByteArray(3) { 0 }) {
+class KeyboardReport(val bytes: ByteArray = ByteArray(8) { 0 }) {
+    // bytes[0] = modifier bits
+    // bytes[1] = reserved
+    // bytes[2..7] = key1..key6 (HID usage codes)
 
     var leftControl: Boolean
         get() = bytes[0] and 0b1 != 0.toByte()
@@ -30,9 +33,38 @@ class KeyboardReport(val bytes: ByteArray = ByteArray(3) { 0 }) {
         get() = bytes[0] and 0b10000000.toByte() != 0.toByte()
         set(v) { bytes[0] = if (v) bytes[0] or 0b10000000.toByte() else bytes[0] and 0b01111111 }
 
-    var key1: Byte
-        get() = bytes[2]
-        set(v) { bytes[2] = v }
+    fun addKey(usage: Int): Boolean {
+        if (usage <= 0) return false
+        val b = usage.toByte()
+        // already in report
+        for (i in 2..7) if (bytes[i] == b) return true
+        // find empty slot
+        for (i in 2..7) if (bytes[i] == 0.toByte()) { bytes[i] = b; return true }
+        return false // 6 keys already pressed
+    }
+
+    fun removeKey(usage: Int): Boolean {
+        if (usage <= 0) return false
+        val b = usage.toByte()
+        for (i in 2..7) {
+            if (bytes[i] == b) { bytes[i] = 0; return true }
+        }
+        return false
+    }
+
+    fun hasKey(usage: Int): Boolean {
+        val b = usage.toByte()
+        for (i in 2..7) if (bytes[i] == b) return true
+        return false
+    }
+
+    fun setModifiers(mod: Int) {
+        bytes[0] = (bytes[0].toInt() and 0xFF00 or (mod and 0xFF)).toByte()
+    }
+
+    fun clearModifiers() {
+        bytes[0] = (bytes[0].toInt() and 0xFF00).toByte()
+    }
 
     fun reset() = bytes.fill(0)
 

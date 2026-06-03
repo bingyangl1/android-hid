@@ -66,7 +66,7 @@ object DescriptorCollection {
         b(0x95), b(0x01),                         //   REPORT_COUNT (1)
         b(0x75), b(0x08),                         //   REPORT_SIZE (8)
         b(0x81), b(0x01),                         //   INPUT (Const)
-        b(0x95), b(0x01),                         //   REPORT_COUNT (1)
+        b(0x95), b(0x06),                         //   REPORT_COUNT (6)
         b(0x75), b(0x08),                         //   REPORT_SIZE (8)
         b(0x15), b(0x00),                         //   LOGICAL_MINIMUM (0)
         b(0x25), b(0x65),                         //   LOGICAL_MAXIMUM (101)

@@ -225,8 +225,11 @@ class HIDKeyboard:
         self.t.cmd(f"kpress:{key}")
         return self
 
-    def release(self, *a):
-        self.t.cmd("krelease:")
+    def release(self, key=None):
+        if key:
+            self.t.cmd(f"krelease:{key}")
+        else:
+            self.t.cmd("krelease:")
         return self
 
     def tap(self, key, hold_ms=40):
@@ -268,8 +271,8 @@ class HIDInput:
     def press(self, key):
         self.keyboard.press(key)
 
-    def release(self, *a):
-        self.keyboard.release()
+    def release(self, key=None):
+        self.keyboard.release(key)
 
     def cmd(self, command):
         t0 = time.perf_counter()

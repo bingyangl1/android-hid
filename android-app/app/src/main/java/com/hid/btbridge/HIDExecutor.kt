@@ -23,16 +23,12 @@ class HIDExecutor(private val bt: BluetoothController) {
     }
 
     private fun sendKeyboard(mod: Int, key: Int) {
-        keyboardReport.reset()
-        keyboardReport.leftControl = mod and 0x01 != 0
-        keyboardReport.leftShift = mod and 0x02 != 0
-        keyboardReport.leftAlt = mod and 0x04 != 0
-        keyboardReport.leftGui = mod and 0x08 != 0
-        keyboardReport.rightControl = mod and 0x10 != 0
-        keyboardReport.rightShift = mod and 0x20 != 0
-        keyboardReport.rightAlt = mod and 0x40 != 0
-        keyboardReport.rightGui = mod and 0x80 != 0
-        if (key > 0) keyboardReport.key1 = key.toByte()
+        if (mod == 0 && key == 0) {
+            keyboardReport.reset()
+        } else {
+            keyboardReport.setModifiers(mod)
+            if (key > 0) keyboardReport.addKey(key)
+        }
         bt.sendKeyboardReport(keyboardReport)
     }
 
@@ -92,7 +88,14 @@ class HIDExecutor(private val bt: BluetoothController) {
                 }
 
                 "krelease" -> {
-                    sendKeyboard(0, 0); "ok"
+                    if (cmd.args.isNotEmpty()) {
+                        val (mod, usage) = CommandParser.parseKey(cmd.args[0])
+                        if (usage > 0) keyboardReport.removeKey(usage)
+                        if (mod > 0) keyboardReport.clearModifiers()
+                    } else {
+                        keyboardReport.reset()
+                    }
+                    bt.sendKeyboardReport(keyboardReport); "ok"
                 }
 
                 "throw" -> {

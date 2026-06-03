@@ -1,7 +1,7 @@
-package com.luoke.hid
+package com.hid.btbridge
 
-import com.luoke.hid.reports.KeyboardReport
-import com.luoke.hid.reports.MouseReport
+import com.hid.btbridge.reports.KeyboardReport
+import com.hid.btbridge.reports.MouseReport
 import kotlinx.coroutines.delay
 
 class HIDExecutor(private val bt: BluetoothController) {

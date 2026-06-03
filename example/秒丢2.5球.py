@@ -9,8 +9,10 @@ import sys
 from functools import wraps
 from typing import Callable, Any
 
-from hid_device import HIDMouse, HIDKeyboard, HIDInput
+sys.path.append('../')
+from PC.hid_device import HIDMouse, HIDKeyboard, HIDInput
 # 初始化键鼠对象
+# dev = HIDInput("tcp")
 dev = HIDInput()
 # ==================== Windows API 初始化 ====================
 user32 = ctypes.WinDLL('user32', use_last_error=True)
@@ -407,6 +409,7 @@ def main():
             if get_key_state(VK_CAPITAL):
                 if not paused:
                     log("CapsLock 开启，暂停丢球...")
+
                     paused = True
                 time.sleep(0.1)   # 暂停期间低频率轮询
                 continue
@@ -420,6 +423,7 @@ def main():
                 # 可选：取消注释以每步都输出
                 count += 1
                 log(f"[{time.strftime('%H:%M:%S')}] 坐标: ({click_x}, {click_y}) 丢球完成, 已丢{count}球")
+
                 pass
             else:
                 log("丢球失败")
@@ -429,6 +433,7 @@ def main():
 
     except KeyboardInterrupt:
         log(f"\n用户中断，脚本退出，总丢球: {count}")
+
 
 if __name__ == "__main__":
     main()

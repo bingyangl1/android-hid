@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "com.luoke.hid"
+    namespace = "com.hid.btbridge"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.luoke.hid"
+        applicationId = "com.hid.btbridge"
         minSdk = 28
         targetSdk = 34
         versionCode = 1

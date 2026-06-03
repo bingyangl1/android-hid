@@ -1,4 +1,4 @@
-package com.luoke.hid
+package com.hid.btbridge
 
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
@@ -10,9 +10,9 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import com.luoke.hid.reports.DescriptorCollection
-import com.luoke.hid.reports.MouseReport
-import com.luoke.hid.reports.KeyboardReport
+import com.hid.btbridge.reports.DescriptorCollection
+import com.hid.btbridge.reports.MouseReport
+import com.hid.btbridge.reports.KeyboardReport
 
 class BluetoothController(private val ctx: Context) {
 
@@ -42,9 +42,9 @@ class BluetoothController(private val ctx: Context) {
 
             val ok = hid.registerApp(
                 BluetoothHidDeviceAppSdpSettings(
-                    "LUOKE HID",
+                    "BT HID Bridge",
                     "蓝牙 HID 键盘鼠标",
-                    "luoke-hid-bt",
+                    "bt-hidbridge",
                     BluetoothHidDevice.SUBCLASS1_COMBO,
                     DescriptorCollection.MOUSE_KEYBOARD_COMBO
                 ),

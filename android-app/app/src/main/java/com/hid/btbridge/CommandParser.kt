@@ -1,4 +1,4 @@
-package com.luoke.hid
+package com.hid.btbridge
 
 object CommandParser {
 

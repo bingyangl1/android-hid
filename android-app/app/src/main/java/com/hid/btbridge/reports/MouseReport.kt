@@ -1,4 +1,4 @@
-package com.luoke.hid.reports
+package com.hid.btbridge.reports
 
 import kotlin.experimental.and
 import kotlin.experimental.or

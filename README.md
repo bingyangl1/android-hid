@@ -1,175 +1,151 @@
-# LUOKE HID — USB HID Bridge for Rooted Android
+# BT HID Bridge
 
-通过 Root 手机实现 USB 硬件级键鼠模拟，绕过反作弊（ACE/EAC/BattlEye）的软件注入检测。
+让 Android 手机充当蓝牙键盘+鼠标，通过 TCP 接收命令并模拟 HID 输入。适用于需要硬件级键鼠输入、绕过软件注入检测的场景。
 
-## Architecture
+## 架构
 
 ```
-PC                                          Phone (rooted Android)
-──                                          ────────────────────
-luoke_app.py
+PC                                          Phone (Android)
+──                                          ────────────────
+hid_device.py
   │
   ▼ HIDInput()
-  ├─ USBTransport ── USB ACM (COM port) ──→ hid_daemon.py
-  │                                          ├─ /dev/hidg0 (keyboard)
-  ├─ TCPTransport ── WiFi TCP:8023 ────────→ ├─ /dev/hidg1 (mouse)
-  │                                          └─ select() loop
-  └─ SSHTransport ── SSH (fallback) ───────→ exec.py / repeat_throw.py
+  ├─ ADBForward ── adb forward tcp:8023 ──→ BT HID Bridge App
+  │                                            ├─ BluetoothController (HID)
+  ├─ TCPTransport ── WiFi TCP:8023 ─────────→ ├─ TcpServer (:8023)
+  │                                            └─ HIDExecutor
+  └─ SSHTransport ── SSH tunnel ────────────→      │
+                                                   ▼
+                                              Bluetooth HID
+                                              ├─ Keyboard (HID)
+                                              └─ Mouse (HID)
 ```
 
-Three transport layers (auto-selected in order):
-| Layer | Latency | Cable needed | Phone daemon |
-|-------|---------|-------------|--------------|
-| **USB ACM** ⚠️ | ~0.1ms | ✅ USB data cable | hid_daemon.py |
-| **TCP/WiFi** | ~20ms | ❌ WiFi only | hid_daemon.py |
-| **SSH** | ~500ms | ❌ WiFi only | None (direct) |
+传输优先级（自动降级）：
 
-⚠️ USB ACM requires kernel `g.serial` support. If unavailable (e.g. OnePlus 9RT on stock kernel), falls back to TCP.
+| 层级 | 传输 | 延迟 | 依赖 |
+|------|------|------|------|
+| 1 | **ADB forward** | ~5ms | ADB 连接（USB/WiFi） |
+| 2 | **TCP WiFi** | ~20ms | WiFi |
+| 3 | **SSH tunnel** | ~500ms | SSH |
 
-## Requirements
+## 快速开始
 
-### Phone
-- **Root access** (Magisk recommended)
-- **Termux** with Python 3
-- Kernel with **CONFIGFS** + **USB Gadget** support (most LineageOS / custom kernels)
-- `g.serial` kernel module (optional — TCP works without it)
-- USB cable for HID mode (`python3 phone_hid_dual.py` restores ADB/MTP on exit)
+### 1. 安装 APP
 
-### PC
-- Python 3.8+
-- `pyserial` (optional, only needed for USB ACM mode): `pip install pyserial`
-- SSH client (for fallback)
-
-## Quick Start
-
-### 1. Phone: Configure HID + Start Daemon
+从 [Releases](../../releases) 下载 APK 安装到手机，或自行编译：
 
 ```bash
-# Push scripts to phone
-scp -P 8022 -r phone root@phone:/data/data/com.termux/files/home/
-scp -P 8022 phone_hid_dual.py root@phone:/data/data/com.termux/files/home/
-
-# SSH into phone and run
-ssh -p 8022 root@phone "su -c 'python3 /data/data/com.termux/files/home/phone_hid_dual.py'"
+cd android-app && gradle assembleDebug
 ```
 
-This will:
-1. Stop ADB
-2. Create USB Gadget with HID keyboard + mouse + serial ACM (optional)
-3. Start `hid_daemon.py` in background
-4. PC should detect HID Keyboard + Mouse + COM port (if g.serial available)
+### 2. 配对蓝牙
 
-### 2. PC: Use HIDInput
+1. 手机打开 APP，点「启动」
+2. 电脑端：设置 → 蓝牙 → 添加蓝牙设备
+3. 找到 `BT HID Bridge`，配对
+4. APP 显示「已连接: 电脑名」即成功
+
+### 3. 运行脚本
 
 ```python
-from hid_device import HIDInput
+from PC.hid_device import HIDInput
 
-dev = HIDInput()                    # Auto: USB > TCP > SSH
-dev.mouse.click("left", 175)        # Left click, 175ms hold
-dev.mouse.click("x1", 40)           # X1 (back) button
-dev.mouse.move(100, -50)            # Relative move
-dev.keyboard.tap("LSHIFT", 35)      # Tap LShift
-dev.keyboard.tap("F5")              # Tap F5
-dev.keyboard.tap("CTRL", 0)         # Modifier as tap (0ms = press only)
-dev.keyboard.press("W")             # Hold W
-dev.mouse.release("left")           # Release specific mouse button
-dev.keyboard.release()              # Release all
+dev = HIDInput()                         # 自动选最快传输
+dev = HIDInput("adb")                    # 强制 ADB forward
+dev = HIDInput("tcp")                    # 强制 WiFi TCP
+dev = HIDInput(show_latency=True)        # 显示每条命令延迟
+
+dev.mouse.click("left", 175)             # 左键点击，按住 175ms
+dev.mouse.click("x1", 40)               # 侧键
+dev.mouse.move(100, -50)                 # 相对移动
+dev.keyboard.tap("LSHIFT", 35)           # 按 Shift 35ms
+dev.keyboard.tap("F5")                   # 按 F5
+dev.cmd("mclick:left:175")               # 原始命令
+
+print(dev.latency_str())                 # 延迟统计
 ```
 
-### 3. Restore Normal USB (Phone)
+## PC 端 API
 
-```bash
-python3 phone_hid_dual.py restore
-# Or emergency kill: echo quit > /data/local/tmp/hid_daemon.quit && python3 reset_usb.py
+### HIDInput
+
+```python
+HIDInput(transport_spec=None, show_latency=False)
 ```
 
-## Configuration
+- `transport_spec`: `"adb"` / `"tcp"` / `"ssh"` / `"tcp:host:port"` / `None`(自动)
+- `show_latency`: 每条命令打印延迟
 
-Phone-side env vars:
-```
-HID_UDC              → UDC name (auto-detect)
-HID_CONFIGFS_PATH    → ConfigFS mount (default /config/usb_gadget)
-HID_TCP_PORT         → Daemon TCP port (default 8023)
-```
+### Mouse
 
-PC-side env vars:
-```
-LUOKE_HOST     → SSH user@host (default root@192.168.5.170)
-LUOKE_SSHPORT  → SSH port (default 8022)
-LUOKE_TCPHOST  → TCP host for daemon (default 192.168.5.170)
-LUOKE_TCPPORT  → TCP port (default 8023)
-LUOKE_VID      → USB VID for COM detection (default VID_22D9)
-```
+| 方法 | 说明 |
+|------|------|
+| `click(button, hold_ms)` | 点击 (`left`/`right`/`middle`/`x1`/`x2`) |
+| `press(button)` | 按下不放 |
+| `release(button)` | 松开 |
+| `move(dx, dy, wheel)` | 相对移动 |
 
-## Supported Inputs
+### Keyboard
 
-### Mouse (5 buttons + wheel)
-- `left`, `right`, `middle`, `x1`, `x2` buttons
-- Relative X/Y movement (8-bit, -127 to +127)
-- Vertical wheel
+| 方法 | 说明 |
+|------|------|
+| `tap(key, hold_ms)` | 按一下 (`A`-`Z`, `F1`-`F12`, `ENTER`, `LSHIFT` 等) |
+| `press(key)` | 按下不放 |
+| `release()` | 松开所有键 |
 
-### Keyboard (all standard keys)
-- A-Z, 0-9
-- F1-F12
-- Modifiers: `LCTRL/RCTRL`, `LSHIFT/RSHIFT`, `LALT/RALT`, `LGUI/RGUI`
-- Navigation: `UP/DOWN/LEFT/RIGHT`, `HOME/END/PGUP/PGDN`
-- Editing: `INSERT/DELETE/BACKSPACE/TAB/ENTER/ESCAPE`
-- Numpad: `NUM0-NUM9`, `NUM_SLASH/NUM_ASTERISK/NUM_MINUS/NUM_PLUS/NUM_DOT/NUM_ENTER`
-- Lock keys: `CAPSLOCK/NUMLOCK/SCROLLLOCK`
-- Other: `PRINTSCREEN/PAUSE/MENU`
-- Aliases: `CTRL=LCTRL`, `SHIFT=LSHIFT`, `ALT=LALT`, `GUI=LGUI`, `ESC=ESCAPE`, `DEL=DELETE`, `INS=INSERT`, etc.
+### 延迟统计
 
-## Adapting to Other Phones
-
-1. **Find UDC**: `ls /sys/class/udc/` — use the only entry (auto-detected)
-2. **Verify ConfigFS**: `ls /config/usb_gadget/` should exist
-3. **If not**, try: `mount -t configfs none /config` (or find existing mount via `mount | grep configfs`)
-4. **Set env vars** if auto-detect fails
-
-Common UDC names per SoC:
-- Snapdragon (888/8Gen1/8Gen2): `a600000.dwc3`
-- Snapdragon (865/870): `a600000.dwc3`
-- MediaTek Dimensity: `musb-hdrc` or `11200000.usb`
-- Exynos: `dwc3`
-- Kirin: `ff100000.dwc3`
-
-## Scripts
-
-| Script | Run on | Description |
-|--------|--------|-------------|
-| `丢球_HID.py` | PC | Clean HID throw loop, rate display, CapsLock pause, NumLock exit |
-| `丢球_手机版.py` | Phone | Direct hidg writes (no daemon), ~15% faster, Ctrl+C or bail file to stop |
-| `秒丢2.5球.py` | PC | Original throw script (legacy, kept for reference) |
-
-Set `LUOKE_TRANSPORT=tcp` before running PC scripts on kernels without `g.serial`.
-
-## Project Structure
-
-```
-luoke/
-├── hid_device.py         PC端: 三层传输 + 键鼠接口
-├── rock_hid.py           PC端: 洛克王国工具 (窗口检测 + 安全校验)
-├── 丢球_HID.py           PC端: 丢球脚本 (HID, 速率显示)
-├── 丢球_手机版.py         手机: 丢球脚本 (直接写 hidg)
-├── 秒丢2.5球.py          PC端: 旧丢球脚本 (未改)
-├── phone_hid_dual.py     手机: Gadget 配置 + 复原
-├── phone/                 手机端脚本
-│   ├── hid_daemon.py     常驻 daemon (USB ACM/TCP)
-│   ├── reset_usb.py      紧急 USB 恢复
-│   ├── exec.py           SSH 代码执行器 (遗留)
-│   └── repeat_throw.py   SSH 批量丢球 (遗留)
-├── _archive/              旧版本归档
-└── 使用说明.md            中文详细文档
+```python
+dev.latency_stats()   # → {avg, min, max, p50, p99, count}
+dev.latency_str()     # → "avg=4.5ms min=3.8ms max=5.2ms ..."
 ```
 
-## Troubleshooting
+## TCP 协议
 
-**USB not detected on PC**: Unplug/replug cable, run setup again.
+APP 监听 `0.0.0.0:8023`，命令格式 `command:arg1:arg2:...`，返回 `ok` 或 `err:...`。
 
-**No COM port appears**: Missing `g.serial` in gadget config. Verify `/dev/ttyGS0` on phone.
+| 命令 | 参数 | 说明 |
+|------|------|------|
+| `mclick` | `button:hold_ms` | 鼠标点击 |
+| `mpress` | `button` | 鼠标按下 |
+| `mrelease` | `button` | 鼠标松开 |
+| `mmove` | `dx:dy:wheel` | 鼠标移动 |
+| `ktap` | `key:hold_ms` | 键盘按键 |
+| `kpress` | `key` | 键盘按下 |
+| `krelease` | — | 键盘松开 |
+| `throw` | `t1:gap:t2` | 组合操作：左键→延迟→Shift |
+| `bthrow` | `n:t1:gap:t2:iv` | 批量 throw |
+| `ping` | — | 返回 `pong` |
 
-**HID device not showing**: Check UDC binding — `cat /sys/class/udc/<UDC>/state` should say `configured`.
+## 环境变量
 
-**Daemon won't start**: Check logs at `/data/local/tmp/hid_daemon.log`
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `LUOKE_HOST` | `root@192.168.5.170` | SSH 地址 |
+| `LUOKE_SSHPORT` | `8022` | SSH 端口 |
+| `LUOKE_TCPHOST` | `192.168.5.170` | TCP 地址 |
+| `LUOKE_TCPPORT` | `8023` | TCP 端口 |
+| `LUOKE_ADB` | `adb` | adb 命令路径 |
 
-**Restore ADB**: `python3 phone_hid_dual.py restore` or emergency: `python3 phone/reset_usb.py`
+## 项目结构
+
+```
+├── PC/
+│   └── hid_device.py          PC端传输层 + 键鼠接口
+├── android-app/               Android 蓝牙 HID 桥接 APP
+│   └── app/src/main/java/com/hid/btbridge/
+│       ├── MainActivity.kt    主界面
+│       ├── BluetoothController.kt  蓝牙 HID 控制
+│       ├── HidBridgeService.kt     前台服务
+│       ├── TcpServer.kt            TCP 服务器
+│       ├── HIDExecutor.kt          命令执行
+│       ├── CommandParser.kt        命令解析
+│       └── reports/                HID 报告描述符
+├── example/                   使用示例
+└── docs/                      文档
+```
+
+## License
+
+MIT

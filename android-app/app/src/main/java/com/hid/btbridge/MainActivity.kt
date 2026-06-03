@@ -1,4 +1,4 @@
-package com.luoke.hid
+package com.hid.btbridge
 
 import android.bluetooth.BluetoothAdapter
 import android.content.BroadcastReceiver
@@ -127,12 +127,16 @@ class MainActivity : AppCompatActivity() {
             .setTitle("如何配对")
             .setMessage(
                 "此 App 让手机充当蓝牙键盘+鼠标。\n\n" +
-                "1. 点「启动」（手机变成可被发现 5 分钟）\n" +
-                "2. 在电脑端：蓝牙设置 → 添加设备\n" +
-                "3. 找到本手机（显示为 OnePlus 9RT 或 LUOKE HID）\n" +
+                "配对步骤：\n" +
+                "1. 点「启动」（手机开启蓝牙可被发现 5 分钟）\n" +
+                "2. 电脑端：设置 → 蓝牙 → 添加蓝牙设备\n" +
+                "3. 找到本手机（显示名称: BT HID Bridge）\n" +
                 "4. 选择它 → 配对\n" +
-                "5. App 显示「已连接: 电脑名」\n\n" +
-                "注意：必须从电脑侧发起配对，而不是从手机侧！"
+                "5. App 显示「已连接: 电脑名」即成功\n\n" +
+                "注意：\n" +
+                "- 必须从电脑侧发起配对\n" +
+                "- 覆盖安装后需删除旧配对再重新添加\n" +
+                "- 断连后 App 自动开启可被发现，电脑直接重连即可"
             )
             .setPositiveButton("知道了", null)
             .show()

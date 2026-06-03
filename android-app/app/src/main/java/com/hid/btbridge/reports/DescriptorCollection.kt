@@ -1,4 +1,4 @@
-package com.luoke.hid.reports
+package com.hid.btbridge.reports
 
 object DescriptorCollection {
     private fun b(i: Int) = i.toByte()

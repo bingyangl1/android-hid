@@ -80,6 +80,9 @@ class BluetoothController(private val ctx: Context) {
     }
 
     private val hidCallback = object : BluetoothHidDevice.Callback() {
+        override fun onRegistration() {
+            onStatus?.invoke("HID 已注册，等待配对...")
+        }
         override fun onConnectionStateChanged(device: BluetoothDevice?, state: Int) {
             when (state) {
                 BluetoothProfile.STATE_CONNECTED -> {

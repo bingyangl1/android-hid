@@ -25,21 +25,21 @@ class HidBridgeService : Service() {
             .build()
         startForeground(1, ntf)
 
-        bt.onStatus = { s -> sendBroadcast(Intent(STATUS_UPDATE).putExtra("text", s)) }
+        bt.onStatus = { s -> sendBroadcast(Intent(STATUS_UPDATE).putExtra("text", s).setPackage(packageName)) }
         bt.onConnected = { _, d ->
             updateNtf("已连接: ${d.name ?: d.address}")
-            sendBroadcast(Intent(STATUS_UPDATE).putExtra("text", "已连接: ${d.name ?: d.address}"))
+            sendBroadcast(Intent(STATUS_UPDATE).putExtra("text", "已连接: ${d.name ?: d.address}").setPackage(packageName))
         }
         bt.onDisconnected = {
             updateNtf("已断开")
-            sendBroadcast(Intent(STATUS_UPDATE).putExtra("text", "已断开"))
+            sendBroadcast(Intent(STATUS_UPDATE).putExtra("text", "已断开").setPackage(packageName))
         }
         bt.init()
 
-        tcp = TcpServer(8023, executor) { cmdCount++; sendBroadcast(Intent(CMD_UPDATE).apply { putExtra("count", cmdCount) }) }
+        tcp = TcpServer(8023, executor) { cmdCount++; android.util.Log.d("HidBridge", "cmdCount=$cmdCount"); sendBroadcast(Intent(CMD_UPDATE).apply { putExtra("count", cmdCount); setPackage(packageName) }) }
         tcp?.start()
         updateNtf("TCP:8023 监听中")
-        sendBroadcast(Intent(STATUS_UPDATE).putExtra("text", "TCP:8023 监听中"))
+        sendBroadcast(Intent(STATUS_UPDATE).putExtra("text", "TCP:8023 监听中").setPackage(packageName))
     }
 
     private fun updateNtf(text: String) {

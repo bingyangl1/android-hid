@@ -50,14 +50,17 @@ class TcpServer(
             sock.soTimeout = 0
             val reader = BufferedReader(InputStreamReader(sock.getInputStream()))
             val writer = OutputStreamWriter(sock.getOutputStream())
+            android.util.Log.d("TcpServer", "client connected: ${sock.remoteSocketAddress}")
             while (running) {
                 val line = reader.readLine() ?: break
+                android.util.Log.d("TcpServer", "recv: $line")
                 val cmd = CommandParser.parse(line) ?: continue
                 onCommand()
                 val resp = executor.exec(cmd) + "\n"
                 writer.write(resp); writer.flush()
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            android.util.Log.e("TcpServer", "handle error", e)
         } finally {
             try { sock.close() } catch (_: Exception) {}
         }

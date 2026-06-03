@@ -105,6 +105,7 @@ class MainActivity : AppCompatActivity() {
         }
         running = true
         bluetoothStatus = "启动中..."
+        cmdCount = 0
         updateUI()
     }
 

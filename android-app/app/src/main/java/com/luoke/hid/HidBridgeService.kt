@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
 import android.os.IBinder
+import android.os.PowerManager
 
 class HidBridgeService : Service() {
 
@@ -13,6 +14,7 @@ class HidBridgeService : Service() {
     private val executor = HIDExecutor(bt)
     private var tcp: TcpServer? = null
     private var cmdCount = 0
+    private var wakeLock: PowerManager.WakeLock? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -24,6 +26,10 @@ class HidBridgeService : Service() {
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .build()
         startForeground(1, ntf)
+
+        wakeLock = (getSystemService(POWER_SERVICE) as PowerManager)
+            .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "luoke:hid_bridge")
+            .apply { acquire() }
 
         bt.onStatus = { s -> sendBroadcast(Intent(STATUS_UPDATE).putExtra("text", s).setPackage(packageName)) }
         bt.onConnected = { _, d ->
@@ -55,6 +61,7 @@ class HidBridgeService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        wakeLock?.let { if (it.isHeld) it.release() }
         tcp?.stop()
         bt.disconnect()
         super.onDestroy()

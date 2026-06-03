@@ -6,8 +6,10 @@ import android.bluetooth.BluetoothHidDevice
 import android.bluetooth.BluetoothHidDeviceAppQosSettings
 import android.bluetooth.BluetoothHidDeviceAppSdpSettings
 import android.bluetooth.BluetoothProfile
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import com.luoke.hid.reports.DescriptorCollection
 import com.luoke.hid.reports.MouseReport
 import com.luoke.hid.reports.KeyboardReport
@@ -27,6 +29,7 @@ class BluetoothController(private val ctx: Context) {
             onStatus?.invoke("蓝牙未开启")
             return
         }
+        ctx.registerReceiver(bondReceiver, IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED))
         onStatus?.invoke("正在请求 HID 代理...")
         adapter.getProfileProxy(ctx, serviceListener, BluetoothProfile.HID_DEVICE)
     }
@@ -91,8 +94,9 @@ class BluetoothController(private val ctx: Context) {
                 }
                 BluetoothProfile.STATE_DISCONNECTED -> {
                     hostDevice = null
-                    onStatus?.invoke("已断开")
+                    onStatus?.invoke("已断开，等待重连...")
                     onDisconnected?.invoke()
+                    reDiscoverable()
                 }
             }
         }
@@ -113,6 +117,7 @@ class BluetoothController(private val ctx: Context) {
     }
 
     fun disconnect() {
+        ctx.unregisterReceiver(bondReceiver)
         hostDevice?.let { hidDevice?.disconnect(it) }
         hidDevice?.let {
             try { it.unregisterApp() } catch (_: Exception) {}
@@ -120,5 +125,30 @@ class BluetoothController(private val ctx: Context) {
         hidDevice?.let { adapter.closeProfileProxy(BluetoothProfile.HID_DEVICE, it) }
         hidDevice = null
         hostDevice = null
+    }
+
+    private fun reDiscoverable() {
+        try {
+            Intent(BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE).also {
+                it.putExtra(BluetoothAdapter.EXTRA_DISCOVERABLE_DURATION, 300)
+                it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                ctx.startActivity(it)
+            }
+            onStatus?.invoke("等待电脑重连...")
+        } catch (_: Exception) {
+            onStatus?.invoke("已断开（请手动开启可被发现）")
+        }
+    }
+
+    private val bondReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action == BluetoothDevice.ACTION_BOND_STATE_CHANGED) {
+                val device = intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
+                val bondState = intent.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.BOND_NONE)
+                if (bondState == BluetoothDevice.BOND_BONDED && device != null) {
+                    onStatus?.invoke("已配对: ${device.name ?: device.address}，等待 HID 连接...")
+                }
+            }
+        }
     }
 }

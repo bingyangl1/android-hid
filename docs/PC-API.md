@@ -70,8 +70,19 @@ dev.latency_str()
 | 方法 | 参数 | 说明 |
 |------|------|------|
 | `tap(key, hold_ms)` | 键名, 毫秒 | 按一下 |
-| `press(key)` | 键名 | 按下不放 |
-| `release()` | — | 松开所有键 |
+| `press(key)` | 键名 | 按下不放（追加到 report，支持多键同时） |
+| `release(key)` | 键名或 `None` | 释放指定键，不传则全松 |
+
+### 多键同时按
+
+`press` 会追加到 report（最多 6 键），`release("key")` 只移除指定键，其他键保持按下状态：
+
+```python
+dev.keyboard.press("LSHIFT")    # Shift 按下
+dev.keyboard.press("a")         # A 追加（Shift+A 同时）
+dev.keyboard.release("a")       # 只松 A，Shift 还按着
+dev.keyboard.release("LSHIFT")  # 松 Shift
+```
 
 ### 支持的键名
 

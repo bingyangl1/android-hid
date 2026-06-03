@@ -28,8 +28,8 @@ APP 的 TCP 服务器监听 `0.0.0.0:8023`，每行一条命令，返回 `ok` �
 | 命令 | 参数 | 示例 | 说明 |
 |------|------|------|------|
 | `ktap` | `key:hold_ms` | `ktap:a:40` | 按一下，按住指定毫秒 |
-| `kpress` | `key` | `kpress:lshift` | 按下不放 |
-| `krelease` | — | `krelease` | 松开所有键 |
+| `kpress` | `key` | `kpress:lshift` | 按下不放（追加到 report，支持多键） |
+| `krelease` | `key`(可选) | `krelease:a` | 释放指定键；不传则全松 |
 
 `key` 为 HID usage name（大小写不敏感），如 `a`, `enter`, `f5`, `lshift`, `space`。
 

@@ -91,8 +91,8 @@ HIDInput(transport_spec=None, show_latency=False)
 | 方法 | 说明 |
 |------|------|
 | `tap(key, hold_ms)` | 按一下 (`A`-`Z`, `F1`-`F12`, `ENTER`, `LSHIFT` 等) |
-| `press(key)` | 按下不放 |
-| `release()` | 松开所有键 |
+| `press(key)` | 按下不放（追加，支持多键同时） |
+| `release(key)` | 释放指定键，不传则全松 |
 
 ### 延迟统计
 
@@ -112,8 +112,8 @@ APP 监听 `0.0.0.0:8023`，命令格式 `command:arg1:arg2:...`，返回 `ok` �
 | `mrelease` | `button` | 鼠标松开 |
 | `mmove` | `dx:dy:wheel` | 鼠标移动 |
 | `ktap` | `key:hold_ms` | 键盘按键 |
-| `kpress` | `key` | 键盘按下 |
-| `krelease` | — | 键盘松开 |
+| `kpress` | `key` | 键盘按下（支持多键） |
+| `krelease` | `key`(可选) | 键盘松开，指定 key 或全松 |
 | `throw` | `t1:gap:t2` | 组合操作：左键→延迟→Shift |
 | `bthrow` | `n:t1:gap:t2:iv` | 批量 throw |
 | `ping` | — | 返回 `pong` |

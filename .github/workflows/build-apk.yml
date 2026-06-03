@@ -1,8 +1,8 @@
-name: Build APK
+name: Build & Release APK
 
 on:
   push:
-    branches: [BluetoothHid]
+    branches: [main]
     paths: ['android-app/**']
     tags: ['v*']
   workflow_dispatch:
@@ -32,14 +32,20 @@ jobs:
         with:
           gradle-version: 8.5
 
-      - name: Build debug APK
+      - name: Build release APK
         run: gradle assembleDebug
+
+      - name: Rename APK
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          [ "$VERSION" = "main" ] && VERSION="latest"
+          cp app/build/outputs/apk/debug/app-debug.apk "../bt-hidbridge-${VERSION}.apk"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: bt-hidbridge-debug
-          path: android-app/app/build/outputs/apk/debug/app-debug.apk
+          name: bt-hidbridge
+          path: bt-hidbridge-*.apk
 
   release:
     needs: build
@@ -66,8 +72,11 @@ jobs:
         working-directory: android-app
         run: gradle assembleDebug
 
+      - name: Rename APK
+        run: cp android-app/app/build/outputs/apk/debug/app-debug.apk "bt-hidbridge-${GITHUB_REF_NAME}.apk"
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: android-app/app/build/outputs/apk/debug/app-debug.apk
+          files: bt-hidbridge-*.apk
           generate_release_notes: true
